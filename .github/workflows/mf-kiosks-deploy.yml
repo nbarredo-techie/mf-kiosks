@@ -1,0 +1,56 @@
+name: Deploy mf-kiosks to Azure Blob Static Website (in /mf-kiosks)
+
+on:
+  push:
+    branches:
+      - master
+      - webpack
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Clean previous build artifacts
+        run: |
+          rm -rf dist/
+          rm -rf node_modules/.cache/
+          rm -rf .pnpm-store/
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Clean remote deployment directory
+        uses: azure/cli@v1
+        with:
+          inlineScript: |
+            az storage blob delete-batch \
+              --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} \
+              --source '$web' \
+              --pattern 'mf-kiosks/*' \
+              --auth-mode key \
+              --account-key ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }} || true
+
+      - name: Upload to Azure Blob Storage (in mf-kiosks/)
+        uses: azure/cli@v1
+        with:
+          inlineScript: |
+            az storage blob upload-batch \
+              --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} \
+              --destination '$web/mf-kiosks' \
+              --source ./dist \
+              --auth-mode key \
+              --account-key ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }} \
+              --overwrite true \
+              --content-cache-control "no-cache"
